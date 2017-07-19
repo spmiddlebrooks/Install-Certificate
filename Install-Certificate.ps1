@@ -23,38 +23,38 @@ param(
 	[Parameter(Mandatory=$True,Position=0)]
         [ValidateSet('SfbEdgeExternal','RdGateway', 'Adfs', 'AdfsProxy', 'Kemp', 'Generic')]
 		[string] $Role,
-	[Parameter(Mandatory=$False,Position=1)]
+	[Parameter(Mandatory=$True,Position=1)]
         [ValidateNotNullorEmpty()]
         [ValidateScript({
             if ([system.uri]::IsWellFormedUriString($_,[System.UriKind]::Absolute) -AND $_.Split(':')[0] -match 'https?') { $True }
-            else { Throw 'Invalid URI format - only anonymous HTTP(s) is supported' }
+            else { Throw 'Invalid URI format - only anonymous HTTP(S) is supported' }
         })]
-		[string] $PfxUrl = 'http://www.spklm.net/certificates/spklm.net.pfx',
-	[Parameter(Mandatory=$False,Position=2)]
+		[string] $PfxUrl,
+	[Parameter(Mandatory=$True,Position=2)]
         [ValidateNotNullorEmpty()]
 		[ValidateScript({
 			if ( Test-Path (Split-Path $_) ) {$True}
 			else {Throw 'Invalid path'}
 		})]
-		[string] $PfxFilePath = 'c:\tools\scripts\spklm.net.pfx',
-	[Parameter(Mandatory=$False,Position=3)]
+		[string] $PfxFilePath,
+	[Parameter(Mandatory=$True,Position=3)]
         [ValidateNotNullorEmpty()]
-		[string] $PfxPassword = 'Smk563!',
+		[string] $PfxPassword,
 	[Parameter(Mandatory=$False,ParameterSetName='Windows')]
         [ValidateNotNullorEmpty()]
-		[string] $CertFriendlyNamePrefix = 'LetsEncrypt - spklm.net ',
+		[string] $CertFriendlyNamePrefix,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
         [ValidateNotNullorEmpty()]
-		[string] $KempUsername = 'bal',
+		[string] $KempUsername,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
         [ValidateNotNullorEmpty()]
-		[string] $KempPassword = 'SMKred1069.....',
+		[string] $KempPassword,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
         [ValidateNotNullorEmpty()]
-		[string] $KempAddress = 'sm01-net-vlm01.internal.spklm.net',
+		[string] $KempAddress,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
         [ValidateNotNullorEmpty()]
-		[string] $KempCertId = 'spklm.net'
+		[string] $KempCertId
 )
 
 function Get-LatestPfxFile {
@@ -112,7 +112,7 @@ function Get-PfXThumbprint {
 			[string] $PfxPassword
     )
 
-    $PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force –AsPlainText)
+    $PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force â€“AsPlainText)
 
 	# Get attributes of the PFX file
 	$PfxObject = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
@@ -142,9 +142,9 @@ function Import-PfxToMachineCertStore {
 			[string] $PfxPassword
     )
 
-    $PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force –AsPlainText)
+    $PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force â€“AsPlainText)
 
-    $null = Import-PfxCertificate –FilePath $PfxFilePath -CertStoreLocation Cert:\LocalMachine\MY -Password $PfxSecurePassword -Exportable
+    $null = Import-PfxCertificate â€“FilePath $PfxFilePath -CertStoreLocation Cert:\LocalMachine\MY -Password $PfxSecurePassword -Exportable
 		
 }
 
@@ -248,7 +248,7 @@ function Enable-AdfsCertificate {
     )
 
     Import-Module ADFS
-    Set-AdfsSslCertificate –Thumbprint $Thumbprint
+    Set-AdfsSslCertificate â€“Thumbprint $Thumbprint
 	Restart-Service AdfsSrv
 }
 
@@ -276,7 +276,7 @@ function Enable-AdfsProxyCertificate {
     Stop-Service appproxysvc
     Stop-Service appproxyctrl
 	Start-Sleep -Seconds 10
-    Get-WebApplicationProxyApplication –Name "ADFS" | Set-WebApplicationProxyApplication –ExternalCertificateThumbprint $Thumbprint
+    Get-WebApplicationProxyApplication â€“Name "ADFS" | Set-WebApplicationProxyApplication â€“ExternalCertificateThumbprint $Thumbprint
     &netsh http delete sslcert ipport=0.0.0.0:443
     &netsh http add sslcert ipport=0.0.0.0:443 certhash=$Thumbprint appid="{"5d89a20c-beab-4389-9447-324788eb944a"}"
     Start-Service appproxyctrl
