@@ -40,7 +40,7 @@ param(
 		[string] $PfxFilePath = 'c:\tools\scripts\spklm.net.pfx',
 	[Parameter(Mandatory=$False,Position=3)]
 		[ValidateNotNullorEmpty()]
-		[string] $PfxPassword = 'Smk563!',
+		[string] $PfxPassword,
 	[Parameter(Mandatory=$False,ParameterSetName='Windows')]
 		[ValidateNotNullorEmpty()]
 		[string] $CertFriendlyName = 'LetsEncrypt - spklm.net',
@@ -49,7 +49,7 @@ param(
 		[string] $KempUsername = 'bal',
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
-		[string] $KempPassword = 'SMKred1069.....',
+		[string] $KempPassword,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
 		[string] $KempAddress = 'sm01-net-vlm01.internal.spklm.net',
