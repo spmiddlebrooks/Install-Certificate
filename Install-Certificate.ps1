@@ -4,12 +4,14 @@
 .PARAMETER
 .EXAMPLE
 .NOTES
-	Version: 1.2
-	Updated: 10/23/2017
+	Version: 1.3.1
+	Updated: 11/13/2017
 	Author : Scott Middlebrooks
 .LINK
 .CHANGELOG
-	1.2	Added Remove-ExpiredCertificates function and updated Set-CertificateFriendlyName function to make appending cert expiry optional
+	1.3.1	Updated Enable-KempCertificate to output REST response information
+	1.3		Added RemoveExpiredCertificatesDate parameter and updated Set-CertificateFriendlyName to fix bug with appending cert expiry to friendly name
+	1.2		Added Remove-ExpiredCertificates function and updated Set-CertificateFriendlyName function to make appending cert expiry optional
 	1.1.3	Updated Enable-KempCertificate function to ignore self signed certificate warnings
 	1.1.3	Updated Get-LatestPfx function return logic and remove PfxPassword parameter
 	1.1.2	Added ParameterSetName to main script parameters
@@ -40,7 +42,14 @@ param(
 		[string] $PfxFilePath = 'c:\tools\scripts\spklm.net.pfx',
 	[Parameter(Mandatory=$False,Position=3)]
 		[ValidateNotNullorEmpty()]
-		[string] $PfxPassword,
+		[string] $PfxPassword = 'Smk563!',
+	[Parameter(Mandatory=$False,ParameterSetName='Windows')]
+		[ValidateNotNullorEmpty()]
+		[ValidateScript({
+			if ([string] $_ -as [DateTime]) {$True}
+			else { Throw 'Invalid Date or DateTime format specified' }
+		})]
+		[string] $RemoveExpiredCertificatesDate,
 	[Parameter(Mandatory=$False,ParameterSetName='Windows')]
 		[ValidateNotNullorEmpty()]
 		[string] $CertFriendlyName = 'LetsEncrypt - spklm.net',
@@ -49,7 +58,7 @@ param(
 		[string] $KempUsername = 'bal',
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
-		[string] $KempPassword,
+		[string] $KempPassword = 'SMKred1069.....',
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
 		[string] $KempAddress = 'sm01-net-vlm01.internal.spklm.net',
@@ -146,7 +155,6 @@ function Import-PfxToMachineCertStore {
 	$PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force –AsPlainText)
 
 	$null = Import-PfxCertificate –FilePath $PfxFilePath -CertStoreLocation Cert:\LocalMachine\MY -Password $PfxSecurePassword -Exportable
-		
 }
 
 function Set-CertificateFriendlyName {
@@ -156,8 +164,8 @@ function Set-CertificateFriendlyName {
 	.PARAMETER
 	.EXAMPLE
 	.NOTES
-		Version: 1.1
-		Updated: 10/23/2017
+		Version: 1.2
+		Updated: 11/13/2017
 		Author : Scott Middlebrooks
 	.LINK
 	#>
@@ -168,13 +176,13 @@ function Set-CertificateFriendlyName {
 		[Parameter(Mandatory=$False)]
 			[string] $CertFriendlyName,
 		[Parameter(Mandatory=$False)]
-			[switch] $AppendExpireDateToCertFriendlyName = $true
+			[switch] $AddExpireDateToCertFriendlyName = $True
 	)
 
 	$Certificate = (Get-ChildItem -Path Cert:\LocalMachine\MY\$Thumbprint)
 	$CertificateExpiry = Get-Date -Date $Certificate.NotAfter -Format 'yyyyMMdd'
-	if ($AppendExpireDateToCertFriendlyName) {
-		$Certificate.FriendlyName = "$CertFriendlyName_$CertificateExpiry"
+	if ($AddExpireDateToCertFriendlyName) {
+		$Certificate.FriendlyName = "$CertFriendlyName $CertificateExpiry"
 	}
 	else {
 		$Certificate.FriendlyName = "$CertFriendlyName"
@@ -203,7 +211,7 @@ function Remove-ExpiredCertificates {
 	)
 	$CertificateStorePath = "Cert:\$CertificateStore\My"
 	
-	Get-ChildItem $CertificateStorePath | Where-Object NotAfter -lt $ExpirationDate | Remove-Item -Confirm
+	Get-ChildItem $CertificateStorePath | Where-Object NotAfter -lt $ExpirationDate | Remove-Item #-Confirm
 }
 
 function Enable-SfbEdgeExternalCertificate {
@@ -323,8 +331,8 @@ function Enable-KempCertificate {
 	.PARAMETER
 	.EXAMPLE
 	.NOTES
-		Version: 1.1
-		Updated: 7/17/2017
+		Version: 1.2
+		Updated: 11/13/2017
 		Author : Scott Middlebrooks
 	.LINK
 		Kemp REST API - https://support.kemptechnologies.com/hc/en-us/articles/203863435-RESTful-API#_Toc477424086
@@ -352,7 +360,8 @@ function Enable-KempCertificate {
 	$sPassword = ConvertTo-SecureString -String $KempPassword -AsPlainText -Force
 	$CredentialObject = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $KempUsername,$sPassword
 	try {
-		Invoke-RestMethod -Method 'POST' -Uri "https://$KempAddress/access/addcert?cert=$KempCertId&password=$PfxPassword&replace=1" -ContentType "application/octet-stream" -InFile $PfxFilePath -Credential $CredentialObject
+		$Result = Invoke-RestMethod -Method 'POST' -Uri "https://$KempAddress/access/addcert?cert=$KempCertId&password=$PfxPassword&replace=1" -ContentType "application/octet-stream" -InFile $PfxFilePath -Credential $CredentialObject
+		$Result.Response
 	}
 	catch {
 	}
@@ -367,25 +376,21 @@ If (Get-LatestPfxFile -PfxUrl $PfxUrl -PfxFilePath $PfxFilePath) {
 		'SfbEdgeExternal' {
 			Enable-SfbEdgeExternalCertificate -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword -Thumbprint $Thumbprint
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
-			Remove-ExpiredCertificates -ExpirationDate '12/13/2017'
 		}
 		'RdGateway' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
 			Enable-RdGwCertificate -Thumbprint $Thumbprint
-			Remove-ExpiredCertificates -ExpirationDate '12/13/2017'
 		}
 		'Adfs' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
 			Enable-AdfsCertificate -Thumbprint $Thumbprint
-			Remove-ExpiredCertificates -ExpirationDate '12/13/2017'
 		}
 		'AdfsProxy' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
 			Enable-AdfsProxyCertificate -Thumbprint $Thumbprint
-			Remove-ExpiredCertificates -ExpirationDate '12/13/2017'
 		}
 		'Kemp' {
 			Enable-KempCertificate -KempUsername $KempUsername -KempPassword $KempPassword -KempAddress $KempAddress -KempCertId $KempCertId -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
@@ -393,7 +398,10 @@ If (Get-LatestPfxFile -PfxUrl $PfxUrl -PfxFilePath $PfxFilePath) {
 		'Generic' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
-			Remove-ExpiredCertificates -ExpirationDate '12/13/2017'
 		}
+	}
+
+	if ($RemoveExpiredCertificatesDate -And $Role -ne 'Kemp') {
+		Remove-ExpiredCertificates -ExpirationDate $RemoveExpiredCertificatesDate
 	}
 }
