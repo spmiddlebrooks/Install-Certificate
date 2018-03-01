@@ -1,2 +1,2 @@
 # Install-Certificate
-Import and Enable certificates for Kemp Load Balancer and Windows Server roles and application
+Import and Enable certificates for Windows Server roles and applications as well Kemp Load Balancer
