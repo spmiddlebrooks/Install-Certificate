@@ -4,14 +4,15 @@
 .PARAMETER
 .EXAMPLE
 .NOTES
-	Version: 1.3.1
-	Updated: 11/13/2017
+	Version: 1.4
+	Updated: 3/1/2018
 	Author : Scott Middlebrooks
 .LINK
 .CHANGELOG
+	1.4	Added Get-ServerRole function to attempt auto-detection of server role if not specified by user
 	1.3.1	Updated Enable-KempCertificate to output REST response information
-	1.3		Added RemoveExpiredCertificatesDate parameter and updated Set-CertificateFriendlyName to fix bug with appending cert expiry to friendly name
-	1.2		Added Remove-ExpiredCertificates function and updated Set-CertificateFriendlyName function to make appending cert expiry optional
+	1.3	Added RemoveExpiredCertificatesDate parameter and updated Set-CertificateFriendlyName to fix bug with appending cert expiry to friendly name
+	1.2	Added Remove-ExpiredCertificates function and updated Set-CertificateFriendlyName function to make appending cert expiry optional
 	1.1.3	Updated Enable-KempCertificate function to ignore self signed certificate warnings
 	1.1.3	Updated Get-LatestPfx function return logic and remove PfxPassword parameter
 	1.1.2	Added ParameterSetName to main script parameters
@@ -23,8 +24,8 @@
 
 [cmdletbinding(DefaultParameterSetName="Windows")]
 param(
-	[Parameter(Mandatory=$True,Position=0)]
-		[ValidateSet('SfbEdgeExternal','RdGateway', 'Adfs', 'AdfsProxy', 'Kemp', 'Generic')]
+	[Parameter(Mandatory=$False,Position=0)]
+		[ValidateSet('Adfs', 'AdfsProxy','RdGateway','SfbEdgeExternal','Generic','Kemp',$Null)]
 		[string] $Role,
 	[Parameter(Mandatory=$False,Position=1)]
 		[ValidateNotNullorEmpty()]
@@ -32,14 +33,14 @@ param(
 			if ([system.uri]::IsWellFormedUriString($_,[System.UriKind]::Absolute) -AND $_.Split(':')[0] -match 'https?') { $True }
 			else { Throw 'Invalid URI format - only anonymous HTTP(s) is supported' }
 		})]
-		[string] $PfxUrl = 'http://www.spklm.net/certificates/spklm.net.pfx',
+		[string] $PfxUrl,
 	[Parameter(Mandatory=$False,Position=2)]
 		[ValidateNotNullorEmpty()]
 		[ValidateScript({
 			if ( Test-Path (Split-Path $_) ) {$True}
 			else {Throw 'Invalid path'}
 		})]
-		[string] $PfxFilePath = 'c:\tools\scripts\spklm.net.pfx',
+		[string] $PfxFilePath,
 	[Parameter(Mandatory=$False,Position=3)]
 		[ValidateNotNullorEmpty()]
 		[string] $PfxPassword,
@@ -52,20 +53,93 @@ param(
 		[string] $RemoveExpiredCertificatesDate,
 	[Parameter(Mandatory=$False,ParameterSetName='Windows')]
 		[ValidateNotNullorEmpty()]
-		[string] $CertFriendlyName = 'LetsEncrypt - spklm.net',
+		[string] $CertFriendlyName,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
-		[string] $KempUsername = 'bal',
+		[string] $KempUsername,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
 		[string] $KempPassword,
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
-		[string] $KempAddress = 'sm01-net-vlm01.internal.spklm.net',
+		[string] $KempAddress',
 	[Parameter(Mandatory=$True,ParameterSetName='Kemp')]
 		[ValidateNotNullorEmpty()]
-		[string] $KempCertId = 'spklm.net'
+		[string] $KempCertId'
 )
+
+function Get-ServerRole {
+	<#
+	.SYNOPSIS
+	.DESCRIPTION
+	.PARAMETER
+	.EXAMPLE
+	.NOTES
+		Version: 1.0
+		Updated: 3/1/2018
+		Author : Scott Middlebrooks
+	.LINK
+	#>
+
+	Write-Host "Trying to detect Server Role.`r"
+
+	# Detect Skype for Business
+	$InstalledApplications = Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*
+	switch -RegEx ($InstalledApplications.DisplayName) { 
+		# Detect Edge Role
+		'Skype for Business Server.+Edge.+'		{$Role = 'SfbEdgeExternal'}
+	}
+
+	# Detect Windows Server Roles/Features
+	$InstalledFeatures = Get-WindowsFeature | Where-Object {$_.Installed}
+	switch ($InstalledFeatures.DisplayName) {
+		# Detect RD Gateway
+		'Remote Desktop Gateway' 			{$Role = 'RDGateway'}
+		# Detect ADFS
+		'Active Directory Federation Services' 		{$Role = 'Adfs'}
+		# Detect ADFS Proxy
+		'Web Application Proxy'				{$Role = 'AdfsProxy'}
+	}
+
+	if ($Role) {
+		$Response = Read-Host "Server Role detected as $Role. Continue? (Y/N)"
+		switch ($Response){
+			'Y' {Write-Host "Continue script with Server Role: $Role"}
+			'N' {Write-Host "Exiting script."; exit}
+		}
+	}
+	else {
+
+[string] $Menu = @'
+
+Unable to detect Server Role.  Please select from the list below.
+
+  1)  Adfs
+  2)  AdfsProxy
+  3)  RdGateway
+  4)  SfbEdgeExternal
+  5)  Windows Generic
+  6)  Kemp
+  99) Exit
+
+Select an option.. [1-99]?
+'@
+
+	$Response = Read-Host $Menu
+		switch ($Response) {
+			1  {$Role = 'Adfs'}
+			2  {$Role = 'AdfsProxy'}
+			3  {$Role = 'RdGateway'}
+			4  {$Role = 'SfBEdgeExternal'}
+			5  {$Role = 'Generic'}
+			6  {$Role = 'Kemp'}
+			99 {Write-Host "Exiting script."; exit}
+		}
+	}
+
+	return $Role
+}
+
 
 function Get-LatestPfxFile {
 	<#
@@ -155,6 +229,7 @@ function Import-PfxToMachineCertStore {
 	$PfxSecurePassword = (ConvertTo-SecureString -String $PfxPassword -Force –AsPlainText)
 
 	$null = Import-PfxCertificate –FilePath $PfxFilePath -CertStoreLocation Cert:\LocalMachine\MY -Password $PfxSecurePassword -Exportable
+		
 }
 
 function Set-CertificateFriendlyName {
@@ -372,16 +447,11 @@ function Enable-KempCertificate {
 If (Get-LatestPfxFile -PfxUrl $PfxUrl -PfxFilePath $PfxFilePath) {
 	$Thumbprint = Get-PfXThumbprint -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 
+	if (-Not $Role) {
+		$Role = Get-ServerRole
+	}
+
 	switch ($Role) {
-		'SfbEdgeExternal' {
-			Enable-SfbEdgeExternalCertificate -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword -Thumbprint $Thumbprint
-			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
-		}
-		'RdGateway' {
-			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
-			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
-			Enable-RdGwCertificate -Thumbprint $Thumbprint
-		}
 		'Adfs' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
@@ -392,12 +462,21 @@ If (Get-LatestPfxFile -PfxUrl $PfxUrl -PfxFilePath $PfxFilePath) {
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
 			Enable-AdfsProxyCertificate -Thumbprint $Thumbprint
 		}
-		'Kemp' {
-			Enable-KempCertificate -KempUsername $KempUsername -KempPassword $KempPassword -KempAddress $KempAddress -KempCertId $KempCertId -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
+		'RdGateway' {
+			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
+			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
+			Enable-RdGwCertificate -Thumbprint $Thumbprint
+		}
+		'SfbEdgeExternal' {
+			Enable-SfbEdgeExternalCertificate -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword -Thumbprint $Thumbprint
+			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
 		}
 		'Generic' {
 			Import-PfxToMachineCertStore -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 			Set-CertificateFriendlyName -Thumbprint $Thumbprint -CertFriendlyName $CertFriendlyName
+		}
+		'Kemp' {
+			Enable-KempCertificate -KempUsername $KempUsername -KempPassword $KempPassword -KempAddress $KempAddress -KempCertId $KempCertId -PfxFilePath $PfxFilePath -PfxPassword $PfxPassword
 		}
 	}
 
