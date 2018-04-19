@@ -4,11 +4,12 @@
 .PARAMETER
 .EXAMPLE
 .NOTES
-	Version: 1.4
-	Updated: 3/1/2018
+	Version: 1.4.1
+	Updated: 4/19/2018
 	Author : Scott Middlebrooks
 .LINK
 .CHANGELOG
+	1.4.1	Added Set-AdfsCertificate to Enable-AdfsCertificate function
 	1.4	Added Get-ServerRole function to attempt auto-detection of server role if not specified by user
 	1.3.1	Updated Enable-KempCertificate to output REST response information
 	1.3	Added RemoveExpiredCertificatesDate parameter and updated Set-CertificateFriendlyName to fix bug with appending cert expiry to friendly name
@@ -365,6 +366,7 @@ function Enable-AdfsCertificate {
 
 	Import-Module ADFS
 	Set-AdfsSslCertificate –Thumbprint $Thumbprint
+	Set-AdfsCertificate -CertificateType Service-Communications –Thumbprint $Thumbprint
 	Restart-Service AdfsSrv
 }
 
