@@ -364,6 +364,7 @@ function Enable-AdfsCertificate {
 			[string] $Thumbprint
 	)
 
+	# certutil.exe -csp "Microsoft Enhanced RSA and AES Cryptographic Provider" -importpfx c:\tools\scripts\spklm.net.pfx
 	Import-Module ADFS
 	Set-AdfsSslCertificate –Thumbprint $Thumbprint
 	Set-AdfsCertificate -CertificateType Service-Communications –Thumbprint $Thumbprint
